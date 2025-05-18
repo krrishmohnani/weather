@@ -14,7 +14,7 @@ def get_weather_data(lat, lon):
     url = "https://easy-weather1.p.rapidapi.com/daily/5"
     querystring = {"latitude": lat, "longitude": lon}
     headers = {
-        "x-rapidapi-key": "YOUR_API_KEY_HERE",  # Replace with your actual key
+        "x-rapidapi-key":"c0a6f42258mshcceedc1d343e8c8p161593jsnb5ed74fe152f" ,  # Replace with your actual key
         "x-rapidapi-host": "easy-weather1.p.rapidapi.com"
     }
     response = requests.get(url, headers=headers, params=querystring)
