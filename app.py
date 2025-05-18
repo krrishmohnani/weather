@@ -1,99 +1,49 @@
 import streamlit as st
+import requests
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-import base64
 
-# Set background image
-def set_background(png_file):
-    with open(png_file, "rb") as f:
-        data = f.read()
-    encoded = base64.b64encode(data).decode()
-    page_bg_img = f'''
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{encoded}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-    }}
-    </style>
-    '''
-    st.markdown(page_bg_img, unsafe_allow_html=True)
+st.title("🌤️ 5-Day Weather Forecast")
+st.markdown("Get a 5-day weather forecast by entering a location's coordinates.")
 
-#
+# Input fields
+latitude = st.text_input("Enter Latitude:", value="1.28")
+longitude = st.text_input("Enter Longitude:", value="103.86")
 
-# Apply custom font
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
-
-    html, body, [class*="css"]  {
-        font-family: 'Roboto', sans-serif;
+# Function to call API and get weather data
+def get_weather_data(lat, lon):
+    url = "https://easy-weather1.p.rapidapi.com/daily/5"
+    querystring = {"latitude": lat, "longitude": lon}
+    headers = {
+        "x-rapidapi-key": "YOUR_API_KEY_HERE",  # Replace with your actual key
+        "x-rapidapi-host": "easy-weather1.p.rapidapi.com"
     }
-    </style>
-    """, unsafe_allow_html=True)
+    response = requests.get(url, headers=headers, params=querystring)
+    data = response.json()
+    
+    days = data['forecastDaily']['days']
+    flat_data = []
+    for day in days:
+        base = {k: v for k, v in day.items() if k not in ['daytimeForecast', 'overnightForecast']}
+        daytime = {f"daytime_{k}": v for k, v in day.get('daytimeForecast', {}).items()}
+        overnight = {f"overnight_{k}": v for k, v in day.get('overnightForecast', {}).items()}
+        flat_data.append({**base, **daytime, **overnight})
+    
+    return pd.DataFrame(flat_data)
 
-# Sample dataset
-data = {
-    'conditionCode': ['Drizzle', 'Rain', 'Rain', 'Drizzle', 'Drizzle'],
-    'temperatureMax': [33.10, 29.75, 30.19, 31.02, 31.73],
-    'temperatureMin': [28.03, 26.94, 26.73, 26.92, 26.90],
-    'maxUvIndex': [9, 6, 7, 7, 8],
-    'precipitationChance': [0.43, 0.84, 0.74, 0.65, 0.59]
-}
+# Button to trigger forecast
+if st.button("Get Forecast"):
+    if latitude and longitude:
+        with st.spinner("Fetching data..."):
+            try:
+                df = get_weather_data(latitude, longitude)
+                st.success("Forecast retrieved successfully!")
+                st.dataframe(df)
 
-# Load data into DataFrame
-df = pd.DataFrame(data)
+                # Option to download
+                csv = df.to_csv(index=False).encode("utf-8")
+                st.download_button("Download CSV", csv, "weather_forecast.csv", "text/csv")
+            except Exception as e:
+                st.error(f"Failed to retrieve data: {e}")
+    else:
+        st.warning("Please enter both latitude and longitude.")
 
-# Features and target
-X = df[['conditionCode', 'temperatureMax', 'temperatureMin', 'maxUvIndex']]
-y = df['precipitationChance']
-
-# Preprocessing pipeline
-categorical_features = ['conditionCode']
-numeric_features = ['temperatureMax', 'temperatureMin', 'maxUvIndex']
-
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features),
-        ('num', 'passthrough', numeric_features)
-    ]
-)
-
-# Build and train the model
-model = Pipeline(steps=[
-    ('preprocessor', preprocessor),
-    ('regressor', RandomForestRegressor(n_estimators=100, random_state=42))
-])
-
-model.fit(X, y)
-
-# Streamlit app
-st.title("🌧️ Precipitation Chance Predictor")
-
-# Input fields for a single record
-st.subheader("Enter Weather Details")
-condition_code = st.selectbox("Condition Code", ['Drizzle', 'Rain'])
-temperature_max = st.number_input("Temperature Max (°C)", min_value=0.0, max_value=50.0, value=30.0)
-temperature_min = st.number_input("Temperature Min (°C)", min_value=0.0, max_value=50.0, value=25.0)
-max_uv_index = st.number_input("Max UV Index", min_value=0, max_value=10, value=7)
-
-# Predict button
-if st.button("Predict"):
-    # Create DataFrame for the single input
-    input_df = pd.DataFrame([{
-        'conditionCode': condition_code,
-        'temperatureMax': temperature_max,
-        'temperatureMin': temperature_min,
-        'maxUvIndex': max_uv_index
-    }])
-
-    # Predict precipitation chance
-    prediction = model.predict(input_df)[0]
-
-    # Display prediction
-    st.subheader("Predicted Precipitation Chance")
-    st.write(f"{prediction * 100:.2f}%")
